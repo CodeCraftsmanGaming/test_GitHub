@@ -13,7 +13,8 @@ jobs:
       - name: Fail - No license ☠️
         if: ${{ !startsWith(env.UNITY_LICENSE, '<') }}
         run: exit 1
-testRunner:
+  testRunner:
+   needs: checkLicense
    name: Test all modes 📝
    runs-on: ubuntu-latest
    steps:
@@ -54,49 +55,48 @@ testRunner:
        with:
          name: Test results (all modes)
          path: ${{ steps.testRunner.outputs.artifactsPath }}
+  buildAndroid:
+       needs: testRunner
+       name: Build for Android 📱
+       runs-on: ubuntu-latest
+       strategy:
+         fail-fast: false
+       steps:
+         - name: Checkout code
+           uses: actions/checkout@v2
 
- buildAndroid:
-   needs: testRunner
-   name: Build for Android 📱
-   runs-on: ubuntu-latest
-   strategy:
-     fail-fast: false
-   steps:
-     - name: Checkout code
-       uses: actions/checkout@v2
+         - name: Create LFS file list
+           run: git lfs ls-files -l | cut -d' ' -f1 | sort > .lfs-assets-id
 
-     - name: Create LFS file list
-       run: git lfs ls-files -l | cut -d' ' -f1 | sort > .lfs-assets-id
+         - name: Restore LFS cache
+           uses: actions/cache@v2
+           id: lfs-cache
+           with:
+             path: .git/lfs
+             key: ${{ runner.os }}-lfs-${{ hashFiles('.lfs-assets-id') }}
 
-     - name: Restore LFS cache
-       uses: actions/cache@v2
-       id: lfs-cache
-       with:
-         path: .git/lfs
-         key: ${{ runner.os }}-lfs-${{ hashFiles('.lfs-assets-id') }}
+         - name: Git LFS Pull
+           run: |
+             git lfs pull
+             git add .
+             git reset --hard
 
-     - name: Git LFS Pull
-       run: |
-         git lfs pull
-         git add .
-         git reset --hard
+         - name: Restore Library cache
+           uses: actions/cache@v2
+           with:
+             path: Library
+             key: Library-build-Android
+             restore-keys: |
+               Library-build-
+               Library-
 
-     - name: Restore Library cache
-       uses: actions/cache@v2
-       with:
-         path: Library
-         key: Library-build-Android
-         restore-keys: |
-           Library-build-
-           Library-
+         - uses: game-ci/unity-builder@v2.2.0
+           with:
+             targetPlatform: Android
+             version: 1.0.0.1
+             androidVersionCode: 1
 
-     - uses: game-ci/unity-builder@v2.2.0
-       with:
-         targetPlatform: Android
-         version: 1.0.0.1
-         androidVersionCode: 1
-
-     - uses: actions/upload-artifact@v2
-       with:
-         name: build-Android
-         path: build/Android
+         - uses: actions/upload-artifact@v2
+           with:
+             name: build-Android
+             path: build/Android
